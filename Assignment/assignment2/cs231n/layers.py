@@ -448,6 +448,48 @@ def conv_forward_naive(x, w, b, conv_param):
                 for w in range(out_W): # 宽度遍历
                     out[n, f, h, w] = np.sum(x_pad[n, :, h*stride : (h*stride+HH), w*stride : (w*stride+WW)] * w[f,:,:,:], axis=(1,2,3)) + b[f] # 卷积运算的矩阵表示
     '''
+    N, C, H, W = x.shape
+    # F：卷积核个数，C：通道数，HH：高度，WW：宽度
+    F, _, HH, WW = w.shape
+    # 步长
+    stride = conv_param['stride']
+    # padding
+    pad = conv_param['pad']
+    # 卷积之后输出的维度计算
+    x_pad = np.pad(x, ((0,), (0,), (pad,), (pad,)), 'constant')
+    out_h = 1 + (H + 2 * pad - HH) // stride
+    out_w = 1 + (W + 2 * pad - WW) // stride
+    out = np.zeros([N, F, out_h, out_w])
+
+    for j in range(out_h):
+        for k in range(out_w):
+            h_coord = min(j * stride, H + 2 * pad - HH)
+            w_coord = min(k * stride, W + 2 * pad - WW)
+            for i in range(F):
+                out[:, i, j, k] = np.sum(x_pad[:, :, h_coord:h_coord+HH, w_coord:w_coord+WW] * w[i, :, :, :], axis=(1, 2, 3))
+    out = out + b[None, :, None, None]
+    
+    '''
+    for n in range(N):
+          for f in range(F):
+                conv_out = np.ones([out_H, out_W]) * b[f]
+                for c in range(C):
+                      x_pad = np.lib.pad(x[n, c], pad_width=pad, mode='constant', constant_values=0)
+                      for h in range(out_H):
+                            for w in range(out_W):
+                                  conv_out[h, w] += np.sum(x_pad[h*stride : h*stride+HH, w*stride : w*stride+WW] * w[f, c, :, :], axis=(1,2,3))
+                out[n, f] = conv_out 
+    '''  
+    '''
+    # pad
+    x_pad = np.pad(x, ((0, 0), (0, 0), (pad, pad),(pad, pad)), 'constant')
+    # 计算
+    for n in range(N): # N个样本
+        for f in range(F): # F个卷积核
+            for h in range(out_H): # 高度遍历
+                for w in range(out_W): # 宽度遍历
+                    out[n, f, h, w] = np.sum(x_pad[n, :, h*stride : (h*stride+HH), w*stride : (w*stride+WW)] * w[f,:,:,:], axis=(1,2,3)) + b[f] # 卷积运算的矩阵表示
+    '''
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
