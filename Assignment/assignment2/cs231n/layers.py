@@ -472,7 +472,100 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
-    pass
+    '''
+    # 数据准备
+    x, w, b, conv_param = cache
+    pad = conv_param['pad']
+    stride = conv_param['stride']
+    F, C, HH, WW = w.shape
+    N, C, H, W = x.shape
+    N, F, new_H, new_W = dout.shape
+
+    # 下面，我们模拟卷积，首先填充x。
+    padded_x = np.lib.pad(x,
+                          ((0, 0), (0, 0), (pad, pad), (pad, pad)),
+                          mode='constant',
+                          constant_values=0)
+    padded_dx = np.zeros_like(padded_x)  # 填充了的dx，后面去填充即可得到dx
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    
+    for n in range(N):  # 第n个图像
+        for f in range(F):  # 第f个过滤器
+            for i in range(new_H):
+                for j in range(new_W):
+                    #dw 等于所有out的每一个像素求导之和，因为out每个像素都共享参数
+                    db[f] += dout[n, f, i, j] # dg对db求导为1*dout
+                    dw[f] += padded_x[n, :, i*stride : HH + i*stride, j*stride : WW + j*stride] * dout[n, f, i, j]
+                    padded_dx[n, :, i*stride : HH + i*stride, j*stride : WW + j*stride] += w[f] * dout[n, f, i, j]
+    # 去掉填充部分
+    dx = padded_dx[:, :, pad:pad + H, pad:pad + W]
+    '''
+    '''
+    # Grab conv parameters and pad x if needed.
+    x, w, b, conv_param = cache
+    stride = conv_param.get('stride')
+    pad = conv_param.get('pad')
+    padded_x = (np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant'))
+
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    N, F, H_out, W_out = dout.shape
+
+    # Initialise gradient output tensors.
+    dx_temp = np.zeros_like(padded_x)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+
+    # Calculate dB.
+    # Just like in the affine layer we sum up all the incoming gradients for each filters bias.
+    for ff in range(F):
+        db[ff] += np.sum(dout[:, ff, :, :])
+
+    # Calculate dw.
+    # By chain rule dw is dout*x
+    for nn in range(N):
+        for ff in range(F):
+            for jj in range(H_out):
+                for ii in range(W_out):
+                    dw[ff, ...] += dout[nn, ff, jj, ii] * padded_x[nn,:,jj*stride:jj*stride+HH,ii*stride:ii*stride+WW]
+
+    # Calculate dx.
+    # By chain rule dx is dout*w. We need to make dx same shape as padded x for the gradient calculation.
+    for nn in range(N):
+        for ff in range(F):
+            for jj in range(H_out):
+                for ii in range(W_out):
+                    dx_temp[nn, :, jj*stride:jj*stride+HH,ii*stride:ii*stride+WW] += dout[nn, ff, jj,ii] * w[ff, ...]
+
+    # Remove the padding from dx so it matches the shape of x.
+    dx = dx_temp[:, :, pad:H+pad, pad:W+pad]
+    '''
+    
+    # 各种尺寸信息的计算
+    x, w, b, conv_param = cache
+    stride, pad = conv_param['stride'], conv_param['pad']
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+    N, F, out_H, out_W = dout.shape
+    # out_H = 1 + int((H - HH + 2*pad) / stride)
+    # out_W = 1 + int((W - WW + 2*pad) / stride)
+    # out = np.zeros([N, F, out_H, out_W])
+    # 构建梯度的矩阵
+    x_pad = np.lib.pad(x, ((0,0),(0,0),(pad,pad),(pad,pad)), mode='constant', constant_values=0)
+    dx_pad = np.zeros_like(x_pad)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    # 按照循环一步步计算
+    for nn in range(N):
+          for ff in range(F):
+                for i in range(out_H):
+                      for j in range(out_W):
+                            db[ff] += dout[nn, ff, i, j] # db就是dout的累加，与DNN的是一样的
+                            dw[ff] += x_pad[nn, :, i*stride:i*stride+HH, j*stride:j*stride+WW] * dout[nn, ff, i, j] # dw其实也应该与DNN是一样，dout*x
+                            dx_pad[nn, :, i*stride:i*stride+HH, j*stride:j*stride+WW] += dout[nn, ff, i, j] * w[ff]
+    dx = dx_pad[:, :, pad:pad+H, pad:pad+W]
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -498,7 +591,21 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # TODO: Implement the max pooling forward pass                            #
     ###########################################################################
-    pass
+    # 先确定形状
+    N, C, H, W = x.shape
+    # 确定池化的参数
+    pool_height, pool_width, stride = pool_param['pool_height'], pool_param['pool_width'], pool_param['stride']
+    # 计算维度
+    out_H = 1 + (H - pool_height) // stride
+    out_W = 1 + (W - pool_width) // stride
+    out = np.zeros([N, C, out_H, out_W])
+    # 循环计算
+    for nn in range(N):
+        for cc in range(C):
+            for hh in range(out_H):
+                for ww in range(out_W):
+                    out[nn, cc, hh, ww] = np.max(x[nn, cc, hh*stride:hh*stride+pool_height, ww*stride:ww*stride+pool_width])
+    
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -521,7 +628,21 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the max pooling backward pass                           #
     ###########################################################################
-    pass
+    # 基本参数的获得
+    x, pool_param = cache
+    pool_height, pool_width, stride = pool_param['pool_height'], pool_param['pool_width'], pool_param['stride']
+    # 矩阵维度的确定
+    N, C, H, W = x.shape
+    _, _, out_H, out_W = dout.shape
+    dx = np.zeros_like(x)
+    # 循环计算
+    for nn in range(N):
+        for cc in range(C):
+            for hh in range(out_H):
+                for ww in range(out_W):
+                    window = x[nn, cc, hh*stride:hh*stride+pool_height, ww*stride:ww*stride+pool_width]
+                    m = np.max(window)
+                    dx[nn, cc, hh*stride:hh*stride+pool_height, ww*stride:ww*stride+pool_width] = (window == m) * dout[nn, cc, hh, ww]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
